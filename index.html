@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulador de Parcelamento</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+      padding: 30px;
+    }
+
+    .container {
+      background-color: #fff;
+      max-width: 600px;
+      margin: auto;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      margin-top: 12px;
+      font-weight: bold;
+    }
+
+    input {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+
+    button {
+      margin-top: 20px;
+      padding: 12px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    .parcelas {
+      margin-top: 30px;
+    }
+
+    .parcela {
+      background-color: #f0f0f0;
+      padding: 10px;
+      margin-bottom: 8px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Simulador de Parcelamento</h1>
+
+    <label for="valor">Valor Total (R$)</label>
+    <input type="number" id="valor" value="1200" step="50.00">
+
+    <label for="quantidade">Número de Parcelas</label>
+    <input type="number" id="quantidade" value="3">
+
+    <label for="prazo">Prazo entre Parcelas (em dias)</label>
+    <input type="number" id="prazo" value="30">
+
+    <label for="inicio">Data da Primeira Parcela</label>
+    <input type="date" id="inicio" value="2025-10-03">
+
+    <label for="primeira">Valor da Primeira Parcela (opcional)</label>
+    <input type="number" id="primeira" step="0.01" placeholder="Deixe em branco se for igual às demais">
+
+    <button onclick="calcularParcelas()">Calcular Parcelas</button>
+
+    <div class="parcelas" id="resultado"></div>
+  </div>
+
+  <script>
+    function ajustarParaDiaUtil(data) {
+      const diaSemana = data.getDay();
+      const ajustada = new Date(data); // cria uma nova instância para não alterar a original
+
+      if (diaSemana === 6) { // sábado
+        ajustada.setDate(ajustada.getDate() - 1);
+      } else if (diaSemana === 0) { // domingo
+        ajustada.setDate(ajustada.getDate() - 2);
+      }
+      return ajustada;
+    }
+
+    function calcularParcelas() {
+      const valorTotal = parseFloat(document.getElementById("valor").value);
+      const quantidade = parseInt(document.getElementById("quantidade").value);
+      const prazoDias = parseInt(document.getElementById("prazo").value);
+      const dataInput = document.getElementById("inicio").value;
+      const valorPrimeiraInput = document.getElementById("primeira").value;
+
+      const resultado = document.getElementById("resultado");
+      resultado.innerHTML = "";
+
+      if (
+        isNaN(valorTotal) ||
+        isNaN(quantidade) ||
+        isNaN(prazoDias) ||
+        quantidade <= 0 ||
+        valorTotal <= 0 ||
+        !dataInput
+      ) {
+        alert("Por favor, preencha todos os campos obrigatórios corretamente.");
+        return;
+      }
+
+      const dataBase = new Date(dataInput);
+      let parcelas = [];
+
+      let valorPrimeira = parseFloat(valorPrimeiraInput);
+      if (!isNaN(valorPrimeira) && valorPrimeira < valorTotal) {
+        const restante = valorTotal - valorPrimeira;
+        const valorOutras = parseFloat((restante / (quantidade - 1)).toFixed(2));
+
+        parcelas.push(valorPrimeira.toFixed(2));
+        for (let i = 1; i < quantidade; i++) {
+          parcelas.push(valorOutras.toFixed(2));
+        }
+
+        const somaAtual = parcelas.reduce((acc, val) => acc + parseFloat(val), 0);
+        const diferenca = (valorTotal - somaAtual).toFixed(2);
+        parcelas[parcelas.length - 1] = (
+          parseFloat(parcelas[parcelas.length - 1]) + parseFloat(diferenca)
+        ).toFixed(2);
+
+      } else {
+        const valorParcela = parseFloat((valorTotal / quantidade).toFixed(2));
+        for (let i = 0; i < quantidade; i++) {
+          parcelas.push(valorParcela.toFixed(2));
+        }
+
+        const somaAtual = parcelas.reduce((acc, val) => acc + parseFloat(val), 0);
+        const diferenca = (valorTotal - somaAtual).toFixed(2);
+        parcelas[parcelas.length - 1] = (
+          parseFloat(parcelas[parcelas.length - 1]) + parseFloat(diferenca)
+        ).toFixed(2);
+      }
+
+      for (let i = 0; i < parcelas.length; i++) {
+        const dataParcela = new Date(dataBase);
+        dataParcela.setDate(dataParcela.getDate() + (prazoDias * i));
+
+        const dataUtil = ajustarParaDiaUtil(dataParcela);
+
+        const dia = String(dataUtil.getDate()).padStart(2, '0');
+        const mes = String(dataUtil.getMonth() + 1).padStart(2, '0');
+        const ano = dataUtil.getFullYear();
+
+        const div = document.createElement("div");
+        div.className = "parcela";
+        div.textContent = `${dia} / ${mes} / ${ano} = R$ ${parcelas[i]}`;
+        resultado.appendChild(div);
+      }
+    }
+  </script>
+</body>
+</html>

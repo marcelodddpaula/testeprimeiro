@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <title>Tests for Simulador de Parcelamento</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #000; color: #f1f1f1; }
+        #results { max-width: 800px; margin: auto; background: #111; padding: 18px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,.6); }
+        .test { padding: 10px; border-radius: 6px; margin-bottom: 8px; }
+        .pass { background: #083918; border: 1px solid #0b8c46; color: #bff6d0; }
+        .fail { background: #3a0b0b; border: 1px solid #7a2f2f; color: #ffd6d6; }
+        iframe { display: none; } /* hidden test target */
+        pre { white-space: pre-wrap; word-break: break-word; color: #f1f1f1; }
+    </style>
+</head>
+<body>
+    <div id="results">
+        <h2>Test Runner — Simulador de Parcelamento</h2>
+        <div id="log"></div>
+    </div>
+
+    <!-- load the page under test from the same directory -->
+    <iframe id="appFrame" src="index.html"></iframe>
+
+    <script>
+        // Minimal test runner utilities
+        function appendResult(name, ok, info) {
+            const container = document.getElementById('log');
+            const div = document.createElement('div');
+            div.className = 'test ' + (ok ? 'pass' : 'fail');
+            div.innerHTML = '<strong>' + (ok ? 'PASS' : 'FAIL') + ':</strong> ' + name +
+                                            (info ? '<div><pre>' + info + '</pre></div>' : '');
+            container.appendChild(div);
+        }
+
+        function waitForFrameLoad(frame) {
+            return new Promise((resolve) => {
+                if (frame.contentWindow && frame.contentDocument && frame.contentDocument.readyState === 'complete') {
+                    resolve();
+                } else {
+                    frame.addEventListener('load', () => resolve(), { once: true });
+                }
+            });
+        }
+
+        // Run tests after iframe loads
+        (async function run() {
+            const frame = document.getElementById('appFrame');
+            await waitForFrameLoad(frame);
+            const win = frame.contentWindow;
+            const doc = frame.contentDocument;
+
+            // Helper to execute calcularParcelas and wait a tick for DOM update
+            function calcularAndWait() {
+                return new Promise((res) => {
+                    try {
+                        win.calcularParcelas();
+                    } catch (e) {
+                        // if function not found or error, resolve so test can assert failure
+                    }
+                    // small delay to allow DOM updates
+                    setTimeout(res, 80);
+                });
+            }
+
+            // Helper to clear previous results
+            function clearResultado() {
+                const resultado = doc.getElementById('resultado');
+                if (resultado) resultado.innerHTML = '';
+            }
+
+            // Test 1: Basic split without first installment -> expect 3 parcelas of 400.00
+            try {
+                // set inputs
+                doc.getElementById('valor').value = '1200';
+                doc.getElementById('quantidade').value = '3';
+                doc.getElementById('prazo').value = '30';
+                doc.getElementById('inicio').value = '2025-10-03';
+                doc.getElementById('primeira').value = '';
+                clearResultado();
+
+                await calcularAndWait();
+
+                const parcelas = doc.querySelectorAll('.parcela');
+                const texts = Array.from(parcelas).map(el => el.textContent.trim());
+
+                let ok = parcelas.length === 3 &&
+                                 texts.every(t => t.includes('R$ 400.00')) &&
+                                 texts[0].startsWith('03 / 10 / 2025');
+
+                appendResult('Basic split (1200, 3 parcels) produces 3 x R$ 400.00 and first date 03/10/2025', ok,
+                    'Found ' + parcelas.length + ' parcela(s). Items:\n' + texts.join('\n'));
+            } catch (err) {
+                appendResult('Basic split test threw an error', false, String(err));
+            }
+
+            // Test 2: First installment provided (100) -> expect [100.00, 550.00, 550.00]
+            try {
+                doc.getElementById('valor').value = '1200';
+                doc.getElementById('quantidade').value = '3';
+                doc.getElementById('prazo').value = '30';
+                doc.getElementById('inicio').value = '2025-10-03';
+                doc.getElementById('primeira').value = '100';
+                clearResultado();
+
+                await calcularAndWait();
+
+                const parcelas = doc.querySelectorAll('.parcela');
+                const texts = Array.from(parcelas).map(el => el.textContent.trim());
+
+                const ok = parcelas.length === 3 &&
+                                     texts[0].includes('R$ 100.00') &&
+                                     texts[1].includes('R$ 550.00') &&
+                                     texts[2].includes('R$ 550.00');
+
+                appendResult('First installment (100) yields [100.00, 550.00, 550.00]', ok,
+                    'Items:\n' + texts.join('\n'));
+            } catch (err) {
+                appendResult('First installment test threw an error', false, String(err));
+            }
+
+            // Test 3: Weekend adjustment: if start date is Saturday (2025-10-04) it should adjust to 03/10/2025
+            try {
+                doc.getElementById('valor').value = '500';
+                doc.getElementById('quantidade').value = '1';
+                doc.getElementById('prazo').value = '30';
+                doc.getElementById('inicio').value = '2025-10-04'; // Saturday
+                doc.getElementById('primeira').value = '';
+                clearResultado();
+
+                await calcularAndWait();
+
+                const parcelas = doc.querySelectorAll('.parcela');
+                const texts = Array.from(parcelas).map(el => el.textContent.trim());
+
+                const ok = parcelas.length === 1 && texts[0].startsWith('03 / 10 / 2025') && texts[0].includes('R$ 500.00');
+
+                appendResult('Weekend adjustment (start Saturday 2025-10-04) moves to 03/10/2025', ok,
+                    'Item:\n' + (texts[0] || 'none'));
+            } catch (err) {
+                appendResult('Weekend adjustment test threw an error', false, String(err));
+            }
+
+            // Test 4: Loop coverage sanity: ensure loop runs parcelas.length times by checking each index presence
+            try {
+                // Use 5 installments to verify number of created elements equals quantidade
+                doc.getElementById('valor').value = '1000';
+                doc.getElementById('quantidade').value = '5';
+                doc.getElementById('prazo').value = '10';
+                doc.getElementById('inicio').value = '2025-10-01';
+                doc.getElementById('primeira').value = '';
+                clearResultado();
+
+                await calcularAndWait();
+
+                const parcelas = doc.querySelectorAll('.parcela');
+
+                const ok = parcelas.length === 5;
+
+                appendResult('Loop creates one .parcela element per installment (5 requested => 5 elements)', ok,
+                    'Created elements: ' + parcelas.length);
+            } catch (err) {
+                appendResult('Loop coverage test threw an error', false, String(err));
+            }
+
+            // Final summary if no tests found (safety)
+            if (document.getElementById('log').children.length === 0) {
+                appendResult('No tests were executed', false, 'Check iframe load and element IDs in index.html');
+            }
+        })();
+    </script>
+</body>
+</html>
